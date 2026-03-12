@@ -281,6 +281,18 @@ tr:hover td{background:rgba(56,189,248,.04)}
       <div class="chart-card fade-in"><h3>Matrículas por Região</h3><div class="chart-wrap"><canvas id="chartMatRegiao"></canvas></div></div>
       <div class="chart-card fade-in"><h3>Municípios mais Afetados (Top 15)</h3><div class="chart-wrap"><canvas id="chartMun"></canvas></div></div>
     </div>
+    <div class="section" id="munListSection" style="margin-top:1rem;display:none">
+      <div class="chart-card fade-in">
+        <h3 id="munListTitle">Todos os Municípios</h3>
+        <div id="munListSummary" style="margin-bottom:.8rem;font-size:.82rem;color:var(--text2)"></div>
+        <div id="munListWrap" style="max-height:400px;overflow-y:auto;overflow-x:hidden">
+          <table style="width:100%" id="munListTable">
+            <thead style="position:sticky;top:0"><tr><th style="cursor:default">Município</th><th style="cursor:default;text-align:right;width:100px">Escolas</th><th style="cursor:default;text-align:right;width:120px">Matrículas</th></tr></thead>
+            <tbody id="munListBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- TAB: Infra -->
@@ -387,7 +399,7 @@ Chart.defaults.borderColor = '#1e293b';
 Chart.defaults.font.family = "'DM Sans',sans-serif";
 Chart.defaults.font.size = 11;
 Chart.defaults.plugins.legend.labels.usePointStyle = true;
-Chart.defaults.plugins.legend.labels.pointStyleWidth = 10;
+Chart.defaults.plugins.legend.labels.pointStyle = 'circle';
 Chart.defaults.plugins.legend.labels.padding = 14;
 
 const COLORS = ['#38bdf8','#818cf8','#f472b6','#34d399','#fbbf24','#fb923c','#a78bfa','#22d3ee','#f87171','#4ade80'];
@@ -829,14 +841,34 @@ function updateOverview(){
     options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{grid:{color:'#1e293b44'},ticks:{callback:v=>v>=1000?(v/1000)+'k':v}},y:{grid:{display:false}}}}
   });
   
-  // Top municipalities
+  // Top municipalities chart
   const mun = groupBy(filtered,'municipio');
-  const munSorted = sortObj(mun).slice(0,15);
+  const munSorted = sortObj(mun);
+  const munTop15 = munSorted.slice(0,15);
   makeChart('chartMun',{
     type:'bar',
-    data:{labels:munSorted.map(e=>e[0]),datasets:[{label:'Escolas',data:munSorted.map(e=>e[1]),backgroundColor:'#f472b644',borderColor:'#f472b6',borderWidth:1.5,borderRadius:4}]},
+    data:{labels:munTop15.map(e=>e[0]),datasets:[{label:'Escolas',data:munTop15.map(e=>e[1]),backgroundColor:'#f472b644',borderColor:'#f472b6',borderWidth:1.5,borderRadius:4}]},
     options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{grid:{display:false},ticks:{maxRotation:45,minRotation:45}},y:{grid:{color:'#1e293b44'}}}}
   });
+  
+  // Full municipality list
+  const hasFilter = selectedUFs.length>0 || selectedMuns.length>0 || document.getElementById('fRegiao').value;
+  const listSection = document.getElementById('munListSection');
+  if(hasFilter && munSorted.length>0){
+    listSection.style.display='block';
+    const matByMun = sumBy(filtered,'municipio','mat_total');
+    const totalEscolas = munSorted.reduce((s,e)=>s+e[1],0);
+    const totalMat = Object.values(matByMun).reduce((s,v)=>s+v,0);
+    document.getElementById('munListTitle').textContent = `Todos os Municípios (${munSorted.length})`;
+    document.getElementById('munListSummary').innerHTML = `<strong style="color:var(--accent)">${fmt(totalEscolas)}</strong> escolas em <strong style="color:var(--accent)">${fmt(munSorted.length)}</strong> municípios — <strong style="color:var(--accent)">${fmt(totalMat)}</strong> matrículas`;
+    document.getElementById('munListBody').innerHTML = munSorted.map((e,i)=>{
+      const mat = matByMun[e[0]]||0;
+      const barW = (e[1]/munSorted[0][1]*100).toFixed(0);
+      return `<tr><td style="position:relative;padding-right:8px"><div style="position:absolute;top:0;left:0;height:100%;width:${barW}%;background:rgba(244,114,182,.07);pointer-events:none"></div><span style="position:relative">${e[0]}</span></td><td style="text-align:right;font-weight:600;color:var(--accent)">${fmt(e[1])}</td><td style="text-align:right;color:var(--text2)">${fmt(mat)}</td></tr>`;
+    }).join('');
+  } else {
+    listSection.style.display='none';
+  }
 }
 
 function updateInfra(){
