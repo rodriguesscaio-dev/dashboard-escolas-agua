@@ -6,15 +6,6 @@
 <title>Painel Analítico — Escolas sem Água Potável | INEP</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,500;0,9..40,700;1,9..40,400&family=Playfair+Display:wght@700;800&display=swap" rel="stylesheet">
-<script defer src="/_vercel/insights/script.js"></script>
-<script type="text/javascript">
-    (function(c,l,a,r,i,t,y){
-        c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};
-        t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;
-        y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
-    })(window, document, "clarity", "script", "vxuo32h9lg");
-</script>
-
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -110,6 +101,8 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);lin
 .ms-options-list::-webkit-scrollbar{width:5px}
 .ms-options-list::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px}
 .ms-count{font-size:.7rem;color:var(--text3);padding:0 .75rem .4rem;border-bottom:1px solid var(--border)}
+.mun-found{color:var(--accent4);font-weight:500}
+.mun-notfound{color:var(--danger);font-weight:500}
 
 /* Section */
 .section{margin-bottom:1.5rem}
@@ -262,8 +255,31 @@ tr:hover td{background:rgba(56,189,248,.04)}
         </div>
       </div>
       <div class="filter-group"><label>Quadra de Esportes</label><select id="fQuadra"><option value="">Todas</option><option value="1">✅ Com Quadra</option><option value="0">❌ Sem Quadra</option></select></div>
+      <div class="filter-group" style="min-width:200px"><label>Fonte de Água</label>
+        <div class="multi-select" id="fAguaWrap">
+          <div class="ms-display" id="fAguaDisplay" onclick="toggleAguaSelect()">
+            <span class="ms-placeholder">Todas</span>
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="#94a3b8"><path d="M8 11L3 6h10z"/></svg>
+          </div>
+          <div class="ms-dropdown" id="fAguaDropdown">
+            <div class="ms-options-list" id="fAguaOptions"></div>
+            <div class="ms-actions"><button class="ms-all" onclick="selectAllAgua()">Todas</button><button class="ms-clear" onclick="clearAgua()">Limpar</button></div>
+          </div>
+        </div>
+      </div>
       <div class="filter-group"><label>Buscar Escola</label><input type="text" id="fSearch" placeholder="Digite o nome..."></div>
       <button class="btn-reset" onclick="resetFilters()">✕ Limpar</button>
+    </div>
+    <div class="filter-row" style="margin-top:.8rem">
+      <div class="filter-group" style="flex:1;min-width:100%">
+        <label>Lista de Municípios (cole separados por vírgula)</label>
+        <div style="display:flex;gap:.5rem;align-items:stretch">
+          <input type="text" id="fMunLista" placeholder="Ex: Belo Horizonte, São Paulo, Guarulhos, Blumenau" style="flex:1">
+          <button class="btn-reset" onclick="aplicarListaMun()" style="white-space:nowrap;padding:.55rem 1rem">🔍 Aplicar</button>
+          <button class="btn-reset" onclick="limparListaMun()" style="white-space:nowrap;padding:.55rem .8rem">✕</button>
+        </div>
+        <div id="munListaFeedback" style="font-size:.75rem;margin-top:.4rem;line-height:1.5;display:none"></div>
+      </div>
     </div>
   </div>
 
@@ -420,6 +436,18 @@ let selectedMuns = [];
 let availableMuns = [];
 let selectedUFs = [];
 let availableUFs = [];
+let selectedAgua = [];
+let munListaActive = false;
+let munListaNames = [];
+
+const AGUA_MAP = {
+  agua_rede:'Rede Pública',
+  agua_poco:'Poço Artesiano',
+  agua_cacimba:'Cacimba',
+  agua_rio:'Fonte/Rio',
+  agua_pipa:'Carro-pipa',
+  agua_inex:'Inexistente'
+};
 
 function populateFilters(){
   const regioes = [...new Set(ALL.map(s=>s.regiao))].sort();
@@ -430,6 +458,7 @@ function populateFilters(){
   fillSelect('fDep',deps);
   fillSelect('fLoc',locs);
   buildPerfilDropdown();
+  buildAguaDropdown();
 }
 function buildPerfilDropdown(){
   const dd=document.getElementById('fPerfilDropdown');
@@ -685,6 +714,144 @@ function renderMunDisplay(){
   }
 }
 
+// === FONTE DE ÁGUA MULTI-SELECT ===
+function buildAguaDropdown(){
+  const dd=document.getElementById('fAguaOptions');
+  let html='';
+  Object.entries(AGUA_MAP).forEach(([k,v])=>{
+    const sel=selectedAgua.includes(k)?'selected':'';
+    html+=`<div class="ms-option ${sel}" data-val="${k}" onclick="toggleAguaOption('${k}')"><div class="ms-check"></div><span>${v}</span></div>`;
+  });
+  dd.innerHTML=html;
+  renderAguaDisplay();
+}
+function toggleAguaSelect(){
+  const dd=document.getElementById('fAguaDropdown');
+  const disp=document.getElementById('fAguaDisplay');
+  dd.classList.toggle('open');
+  disp.classList.toggle('open');
+  if(dd.classList.contains('open')){
+    setTimeout(()=>{document.addEventListener('click',closeAguaOutside)},10);
+  }
+}
+function closeAguaOutside(e){
+  const wrap=document.getElementById('fAguaWrap');
+  if(!wrap.contains(e.target)){
+    document.getElementById('fAguaDropdown').classList.remove('open');
+    document.getElementById('fAguaDisplay').classList.remove('open');
+    document.removeEventListener('click',closeAguaOutside);
+  }
+}
+function toggleAguaOption(key){
+  const idx=selectedAgua.indexOf(key);
+  if(idx>=0) selectedAgua.splice(idx,1);
+  else selectedAgua.push(key);
+  buildAguaDropdown();
+  applyFilters();
+}
+function selectAllAgua(){
+  selectedAgua=Object.keys(AGUA_MAP).slice();
+  buildAguaDropdown();
+  applyFilters();
+}
+function clearAgua(){
+  selectedAgua=[];
+  buildAguaDropdown();
+  applyFilters();
+}
+function renderAguaDisplay(){
+  const disp=document.getElementById('fAguaDisplay');
+  if(selectedAgua.length===0){
+    disp.innerHTML='<span class="ms-placeholder">Todas</span><svg width="12" height="12" viewBox="0 0 16 16" fill="#94a3b8"><path d="M8 11L3 6h10z"/></svg>';
+  } else if(selectedAgua.length<=2){
+    let t='<div class="ms-tags">';
+    selectedAgua.forEach(k=>{
+      t+=`<span class="ms-tag">${AGUA_MAP[k]}<span class="ms-tag-x" onclick="event.stopPropagation();toggleAguaOption('${k}')">×</span></span>`;
+    });
+    t+='</div><svg width="12" height="12" viewBox="0 0 16 16" fill="#94a3b8"><path d="M8 11L3 6h10z"/></svg>';
+    disp.innerHTML=t;
+  } else {
+    disp.innerHTML=`<div class="ms-tags"><span class="ms-tag">${selectedAgua.length} fontes selecionadas<span class="ms-tag-x" onclick="event.stopPropagation();clearAgua()">×</span></span></div><svg width="12" height="12" viewBox="0 0 16 16" fill="#94a3b8"><path d="M8 11L3 6h10z"/></svg>`;
+  }
+}
+
+// === LISTA DE MUNICÍPIOS (TEXTO) ===
+function normalize(str){
+  return str.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
+}
+function aplicarListaMun(){
+  const input=document.getElementById('fMunLista').value.trim();
+  if(!input){limparListaMun();return;}
+  const nomes=input.split(',').map(n=>n.trim()).filter(n=>n.length>0);
+  if(nomes.length===0){limparListaMun();return;}
+  
+  const allMunNames=[...new Set(ALL.map(s=>s.municipio))];
+  const normList=allMunNames.map(m=>({orig:m,norm:normalize(m)}));
+  
+  const found=[];
+  const notFound=[];
+  const matchedOriginal=[];
+  
+  nomes.forEach(nome=>{
+    const n=normalize(nome);
+    
+    // 1) Match exato normalizado
+    const exact=normList.find(m=>m.norm===n);
+    if(exact){
+      found.push(nome);
+      matchedOriginal.push(exact.orig);
+      return;
+    }
+    
+    // 2) Município começa com o input (ex: "Concordia" → "Concordia do Pará")
+    const startsWith=normList.filter(m=>m.norm.startsWith(n+' ')||m.norm.startsWith(n+'-'));
+    if(startsWith.length===1){
+      found.push(nome+' → '+startsWith[0].orig);
+      matchedOriginal.push(startsWith[0].orig);
+      return;
+    }
+    
+    // 3) Não encontrou — montar sugestões
+    let hint='';
+    if(startsWith.length>1){
+      hint=' <span style="color:var(--text3)">(múltiplos: '+startsWith.map(m=>m.orig).join(', ')+')</span>';
+    } else {
+      // procura municípios que contenham todas as palavras do input
+      const words=n.split(/\s+/).filter(w=>w.length>2);
+      let candidates=[];
+      if(words.length>=1){
+        candidates=normList.filter(m=>words.every(w=>m.norm.includes(w)));
+      }
+      if(candidates.length>0 && candidates.length<=3){
+        hint=' <span style="color:var(--text3)">(talvez: '+candidates.map(m=>m.orig).join(', ')+'?)</span>';
+      }
+    }
+    notFound.push(nome+hint);
+  });
+  
+  munListaActive=true;
+  munListaNames=[...new Set(matchedOriginal)];
+  
+  const fb=document.getElementById('munListaFeedback');
+  fb.style.display='block';
+  let fbHtml='';
+  if(found.length>0) fbHtml+=`<span class="mun-found">✓ Encontrados (${found.length}):</span> ${found.join(' &nbsp;• ')}`;
+  if(notFound.length>0) fbHtml+=`${found.length>0?'<br>':''}<span class="mun-notfound">✗ Sem dados (${notFound.length}):</span> ${notFound.join(' &nbsp;• ')}`;
+  if(munListaNames.length===0 && nomes.length>0) fbHtml+=`<br><span style="color:var(--text3)">Nenhum dos municípios possui escolas sem água potável na base INEP.</span>`;
+  fb.innerHTML=fbHtml;
+  
+  selectedMuns=[];
+  renderMunDisplay();
+  applyFilters();
+}
+function limparListaMun(){
+  document.getElementById('fMunLista').value='';
+  munListaActive=false;
+  munListaNames=[];
+  document.getElementById('munListaFeedback').style.display='none';
+  applyFilters();
+}
+
 function fillSelect(id,arr){
   const el=document.getElementById(id);
   arr.forEach(v=>{const o=document.createElement('option');o.value=v;o.textContent=v;el.appendChild(o)});
@@ -697,16 +864,22 @@ function applyFilters(){
   const sp=selectedPerfis;
   const sm=selectedMuns;
   const su=selectedUFs;
+  const sa=selectedAgua;
   const s=document.getElementById('fSearch').value.toLowerCase().trim();
+  // munLista takes priority over dropdown mun filter
+  const useMunLista=munListaActive && munListaNames.length>0;
   
   filtered = ALL.filter(sc=>{
     if(r && sc.regiao!==r) return false;
     if(su.length>0 && !su.includes(sc.uf)) return false;
-    if(sm.length>0 && !sm.includes(sc.municipio)) return false;
+    if(useMunLista){
+      if(!munListaNames.includes(sc.municipio)) return false;
+    } else if(sm.length>0 && !sm.includes(sc.municipio)) return false;
     if(d && sc.dep!==d) return false;
     if(l && sc.loc!==l) return false;
     if(q!=='' && sc.quadra!==+q) return false;
     if(sp.length>0 && !sp.some(p=>sc.perfis.includes(p))) return false;
+    if(sa.length>0 && !sa.some(k=>sc[k]===1)) return false;
     if(s && !sc.nome.toLowerCase().includes(s)) return false;
     return true;
   });
@@ -715,10 +888,16 @@ function applyFilters(){
 function resetFilters(){
   ['fRegiao','fDep','fLoc','fQuadra'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('fSearch').value='';
+  document.getElementById('fMunLista').value='';
   selectedPerfis=[];
   selectedMuns=[];
   selectedUFs=[];
+  selectedAgua=[];
+  munListaActive=false;
+  munListaNames=[];
+  document.getElementById('munListaFeedback').style.display='none';
   renderPerfilDisplay();
+  buildAguaDropdown();
   buildUFOptions();
   buildMunOptions();
   filtered=[...ALL];
@@ -732,6 +911,7 @@ function resetFilters(){
   });
 });
 document.getElementById('fSearch').addEventListener('input',debounce(applyFilters,300));
+document.getElementById('fMunLista').addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();aplicarListaMun()}});
 function debounce(fn,ms){let t;return function(...a){clearTimeout(t);t=setTimeout(()=>fn.apply(this,a),ms)}}
 
 // === TABS ===
