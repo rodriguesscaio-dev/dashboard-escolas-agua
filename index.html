@@ -1661,15 +1661,6 @@ populateFilters();
 buildUFOptions();
 buildMunOptions();
 updateAll();
-
-// === CONTACT WIDGET ===
-(function(){
-  const w = document.getElementById('contactWidget');
-  const fab = document.getElementById('contactFab');
-  fab.addEventListener('click', e=>{ e.stopPropagation(); w.classList.toggle('open'); });
-  document.addEventListener('click', e=>{ if(!w.contains(e.target)) w.classList.remove('open'); });
-  document.addEventListener('keydown', e=>{ if(e.key==='Escape') w.classList.remove('open'); });
-})();
 </script>
 
 <!-- CONTACT WIDGET -->
@@ -1689,5 +1680,17 @@ updateAll();
     <span class="fab-label">Entre em contato</span>
   </button>
 </div>
+
+<script>
+// === CONTACT WIDGET === (apos o HTML do widget existir no DOM)
+(function(){
+  const w = document.getElementById('contactWidget');
+  const fab = document.getElementById('contactFab');
+  if(!w || !fab) return;
+  fab.addEventListener('click', e=>{ e.stopPropagation(); w.classList.toggle('open'); });
+  document.addEventListener('click', e=>{ if(!w.contains(e.target)) w.classList.remove('open'); });
+  document.addEventListener('keydown', e=>{ if(e.key==='Escape') w.classList.remove('open'); });
+})();
+</script>
 </body>
 </html>
