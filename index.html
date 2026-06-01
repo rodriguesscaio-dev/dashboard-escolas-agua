@@ -1068,8 +1068,31 @@ const UF_NAMES = {
   MS:'Mato Grosso do Sul',MT:'Mato Grosso',GO:'Goiás',DF:'Distrito Federal'
 };
 let map=null, mapReady=false, mapInitStarted=false;
-let mapLevel='br', curUFsigla=null, curUFcode=null, munLayersBuilt=false;
+let munLayersBuilt=false, lastMeshKey='', lastMunKey='', mapGen=0;
 const munMeshCache={}, munNamesCache={}, munDataNameCache={};
+const SIGLA_TO_CODE={}; for(const c in UF_CODE_TO_SIGLA) SIGLA_TO_CODE[UF_CODE_TO_SIGLA[c]]=c;
+function prefetchUF(code, sigla){ if(!munMeshCache[code]) loadMunForUF(code, sigla).catch(()=>{}); }
+// UFs que o mapa deve mostrar em modo municipio: estados selecionados, ou os estados
+// derivados de um filtro de municipio ativo (ex: filtrar "Mesquita" -> entra no RJ)
+function mapUFs(){
+  if(selectedUFs.length) return selectedUFs.slice();
+  if((selectedMuns && selectedMuns.length) || (munListaActive && munListaNames.length))
+    return [...new Set(filtered.map(s=>s.uf))];
+  return [];
+}
+function mergedFeatures(ufs){ const fs=[]; ufs.forEach(s=>{ const g=munMeshCache[SIGLA_TO_CODE[s]]; if(g) fs.push(...g.features); }); return fs; }
+function fitToSelection(ufs){
+  const feats=mergedFeatures(ufs);
+  const focusMun=(selectedMuns && selectedMuns.length) || (munListaActive && munListaNames.length);
+  let target=feats;
+  if(focusMun){
+    const lit=new Set(); for(const s of filtered) lit.add(s.uf+'|'+normalize(s.municipio));
+    const sel=feats.filter(f=>{ const cc=String(f.properties.codarea); const uc=cc.slice(0,2); const nm=(munNamesCache[uc]||{})[cc]; return nm && lit.has((UF_CODE_TO_SIGLA[uc]||'')+'|'+normalize(nm)); });
+    if(sel.length) target=sel;
+  }
+  const b=geojsonBounds({features:target});
+  if(b) map.fitBounds(b,{padding: focusMun?60:30, duration:700, maxZoom: focusMun?10:8});
+}
 
 async function initMap(){
   if(mapInitStarted) return;
@@ -1132,8 +1155,9 @@ async function initMap(){
       map.setFilter('uf-hover', ['==','sigla', f.properties.sigla]);
       map.getCanvas().style.cursor = 'pointer';
       popup.setLngLat(e.lngLat).setHTML(
-        `<strong>${f.properties.nome}</strong><br>${fmt(count)} escolas sem água`
+        `<strong>${f.properties.nome}</strong><br>${fmt(count)} escolas sem água<br><span style="opacity:.55;font-size:.72rem">clique para ver os municípios</span>`
       ).addTo(map);
+      prefetchUF(code, f.properties.sigla); // adianta o download p/ clique instantaneo
     });
     map.on('mouseleave','uf-fill', ()=>{
       map.setFilter('uf-hover', ['==','sigla','__none__']);
@@ -1141,9 +1165,9 @@ async function initMap(){
       popup.remove();
     });
     map.on('click','uf-fill', e=>{
-      const f = e.features[0];
-      const code = String(f.properties.codarea);
-      drillIntoUF(f.properties.sigla, code, f.properties.nome);
+      const sigla = e.features[0].properties.sigla;
+      // adiciona/remove a UF da selecao -> entra no modo municipios (varios estados juntos)
+      if(sigla && typeof toggleUFOption === 'function') toggleUFOption(sigla);
     });
 
     mapReady = true;
@@ -1158,24 +1182,82 @@ async function initMap(){
 
 function refreshMapData(){
   if(!mapReady || !map) return;
-  if(mapLevel==='uf'){ refreshMunData(); return; }
+  const ufs = mapUFs();
+  const meshKey = ufs.slice().sort().join(',');
+  const munKey = (selectedMuns||[]).slice().sort().join(',') + '|' + (munListaActive ? munListaNames.slice().sort().join(',') : '');
+  const meshChanged = meshKey !== lastMeshKey;
+  const munChanged = munKey !== lastMunKey;
+  lastMeshKey = meshKey; lastMunKey = munKey;
+  if(!ufs.length){ showNationalMode(meshChanged); return; }
+  enterMunicipalMode(ufs, meshChanged, meshChanged || munChanged);
+}
+
+function showNationalMode(fly){
+  if(munLayersBuilt) ['mun-fill','mun-line','mun-hover'].forEach(l=>{ if(map.getLayer(l)) map.setLayoutProperty(l,'visibility','none'); });
+  ['uf-fill','uf-line','uf-hover'].forEach(l=>{ if(map.getLayer(l)) map.setLayoutProperty(l,'visibility','visible'); });
+  if(map.getLayer('uf-selected')) map.setFilter('uf-selected', ['==','sigla','__none__']);
   const counts = {};
   for(const s of filtered) counts[s.uf] = (counts[s.uf]||0) + 1;
   for(const code in UF_CODE_TO_SIGLA){
-    const sigla = UF_CODE_TO_SIGLA[code];
-    map.setFeatureState({source:'ufs', id: parseInt(code,10)}, { count: counts[sigla]||0 });
+    map.setFeatureState({source:'ufs', id: parseInt(code,10)}, { count: counts[UF_CODE_TO_SIGLA[code]]||0 });
   }
-  const selFilter = selectedUFs && selectedUFs.length
-    ? ['in','sigla', ...selectedUFs]
-    : ['==','sigla','__none__'];
-  if(map.getLayer('uf-selected')) map.setFilter('uf-selected', selFilter);
+  document.getElementById('mapTitle').textContent='Distribuição Geográfica por Estado';
+  document.getElementById('mapBack').style.display='none';
   const sub = document.getElementById('mapSubtitle');
-  if(sub){
-    sub.textContent = `${fmt(filtered.length)} escolas sem água potável • clique num estado para ver os municípios`;
+  if(sub) sub.textContent = `${fmt(filtered.length)} escolas sem água potável • clique num estado para ver os municípios`;
+  if(fly) map.flyTo({center:[-54,-14], zoom:3.3, duration:700});
+}
+
+async function enterMunicipalMode(ufs, reload, refit){
+  // mesma malha (mudou só outro filtro): recolore; refit apenas se a selecao de municipio mudou
+  if(!reload && munLayersBuilt){ colorMuns(); if(refit) fitToSelection(ufs); return; }
+  const gen = ++mapGen;
+  const ld = document.getElementById('mapLoading');
+  const need = ufs.filter(s=>!munMeshCache[SIGLA_TO_CODE[s]]);
+  if(need.length && ld){ ld.style.display='flex'; ld.style.color=''; ld.textContent='Carregando municípios…'; }
+  try{
+    await Promise.all(ufs.map(s=>loadMunForUF(SIGLA_TO_CODE[s], s)));
+    if(gen !== mapGen) return; // selecao mudou no meio: aborta este render
+    const merged = { type:'FeatureCollection', features: mergedFeatures(ufs) };
+    if(!munLayersBuilt) buildMunLayers(merged);
+    else map.getSource('muns').setData(merged);
+    ['uf-fill','uf-line','uf-hover','uf-selected'].forEach(l=>{ if(map.getLayer(l)) map.setLayoutProperty(l,'visibility','none'); });
+    ['mun-fill','mun-line','mun-hover'].forEach(l=>{ if(map.getLayer(l)) map.setLayoutProperty(l,'visibility','visible'); });
+    if(ld) ld.style.display='none';
+    document.getElementById('mapTitle').textContent = ufs.length===1
+      ? 'Municípios — '+(UF_NAMES[ufs[0]]||ufs[0])
+      : 'Municípios — '+ufs.length+' estados ('+ufs.join(', ')+')';
+    document.getElementById('mapBack').style.display='inline-block';
+    colorMuns();
+    fitToSelection(ufs);
+  }catch(err){
+    console.error('municipal load failed', err);
+    if(ld){ ld.style.display='flex'; ld.style.color='#fca5a5'; ld.textContent='Não foi possível carregar os municípios: '+(err.message||err); }
   }
 }
 
-// --- Drill-down por municipio ---
+function colorMuns(){
+  if(!mapReady || !map || !map.getSource('muns')) return;
+  const ufs = mapUFs();
+  const counts={};
+  for(const s of filtered){ const k=s.uf+'|'+normalize(s.municipio); counts[k]=(counts[k]||0)+1; }
+  ufs.forEach(sig=>{
+    const ufCode=SIGLA_TO_CODE[sig]; const nameByCode=munNamesCache[ufCode]||{};
+    for(const code in nameByCode){
+      const key=sig+'|'+normalize(nameByCode[code]);
+      map.setFeatureState({source:'muns', id:parseInt(code,10)}, { count: counts[key]||0 });
+    }
+  });
+  const sub=document.getElementById('mapSubtitle');
+  if(sub){
+    const nMun = selectedMuns ? selectedMuns.length : 0;
+    sub.textContent = nMun
+      ? `${fmt(filtered.length)} escolas em ${nMun} município${nMun>1?'s':''} • clique para remover`
+      : `${fmt(filtered.length)} escolas sem água em ${ufs.join(', ')} • clique num município para filtrar`;
+  }
+}
+
+// --- helpers de malha municipal ---
 function geojsonBounds(geo){
   let minX=180,minY=90,maxX=-180,maxY=-90,found=false;
   const scan=c=>{ const x=c[0],y=c[1]; if(x<minX)minX=x; if(x>maxX)maxX=x; if(y<minY)minY=y; if(y>maxY)maxY=y; found=true; };
@@ -1187,7 +1269,7 @@ function geojsonBounds(geo){
 async function loadMunForUF(code, sigla){
   if(!munMeshCache[code]){
     const [meshRes, locRes] = await Promise.all([
-      fetch(`https://servicodados.ibge.gov.br/api/v3/malhas/estados/${code}?qualidade=intermediaria&formato=application/vnd.geo+json&intrarregiao=municipio`),
+      fetch(`https://servicodados.ibge.gov.br/api/v3/malhas/estados/${code}?qualidade=minima&formato=application/vnd.geo+json&intrarregiao=municipio`),
       fetch(`https://servicodados.ibge.gov.br/api/v1/localidades/estados/${code}/municipios`)
     ]);
     if(!meshRes.ok) throw new Error('malha '+meshRes.status);
@@ -1218,81 +1300,30 @@ function buildMunLayers(geo){
   map.addLayer({ id:'mun-hover', type:'line', source:'muns', paint:{'line-color':'#f472b6','line-width':2}, filter:['==','codarea','__none__'] });
   const popup = new maplibregl.Popup({closeButton:false,closeOnClick:false,offset:8});
   map.on('mousemove','mun-fill', ev=>{
-    const ff=ev.features[0]; const cc=String(ff.properties.codarea);
+    const ff=ev.features[0]; const cc=String(ff.properties.codarea); const ufCode=cc.slice(0,2);
     const st=map.getFeatureState({source:'muns', id:parseInt(cc,10)}); const ct=st.count||0;
-    const nm=(munNamesCache[curUFcode]||{})[cc]||cc;
+    const nm=(munNamesCache[ufCode]||{})[cc]||cc; const sig=UF_CODE_TO_SIGLA[ufCode]||'';
     map.setFilter('mun-hover',['==','codarea',ff.properties.codarea]);
     map.getCanvas().style.cursor='pointer';
-    popup.setLngLat(ev.lngLat).setHTML(`<strong>${nm}</strong><br>${fmt(ct)} escolas sem água`).addTo(map);
+    popup.setLngLat(ev.lngLat).setHTML(`<strong>${nm}</strong> <span style="opacity:.55">(${sig})</span><br>${fmt(ct)} escolas sem água`).addTo(map);
   });
   map.on('mouseleave','mun-fill', ()=>{ map.setFilter('mun-hover',['==','codarea','__none__']); map.getCanvas().style.cursor=''; popup.remove(); });
   map.on('click','mun-fill', ev=>{
-    const cc=String(ev.features[0].properties.codarea);
-    const nm=(munNamesCache[curUFcode]||{})[cc];
+    const cc=String(ev.features[0].properties.codarea); const ufCode=cc.slice(0,2);
+    const nm=(munNamesCache[ufCode]||{})[cc];
     if(!nm) return;
-    const dataName=(munDataNameCache[curUFcode]||{})[normalize(nm)];
+    const dataName=(munDataNameCache[ufCode]||{})[normalize(nm)];
     if(dataName && typeof toggleMunOption==='function') toggleMunOption(dataName);
   });
   munLayersBuilt=true;
 }
 
-async function drillIntoUF(sigla, code, nome){
-  if(!mapReady || !sigla) return;
-  curUFsigla=sigla; curUFcode=code;
-  const ld=document.getElementById('mapLoading');
-  if(ld){ ld.style.display='flex'; ld.style.color=''; ld.textContent='Carregando municípios…'; }
-  try{
-    const { geo } = await loadMunForUF(code, sigla);
-    mapLevel='uf';
-    ['uf-fill','uf-line','uf-hover','uf-selected'].forEach(l=>{ if(map.getLayer(l)) map.setLayoutProperty(l,'visibility','none'); });
-    if(!munLayersBuilt) buildMunLayers(geo);
-    else { map.getSource('muns').setData(geo); ['mun-fill','mun-line','mun-hover'].forEach(l=>{ if(map.getLayer(l)) map.setLayoutProperty(l,'visibility','visible'); }); }
-    const b=geojsonBounds(geo); if(b) map.fitBounds(b,{padding:30,duration:800});
-    document.getElementById('mapTitle').textContent='Municípios — '+(nome||sigla);
-    document.getElementById('mapBack').style.display='inline-block';
-    if(ld) ld.style.display='none';
-    // sincroniza o dashboard com o estado escolhido (dispara applyFilters -> updateAll -> refreshMunData)
-    selectedUFs=[sigla]; selectedMuns=[];
-    if(typeof renderUFOptionsList==='function') renderUFOptionsList();
-    renderUFDisplay(); buildMunOptions(); renderMunDisplay();
-    applyFilters();
-  }catch(err){
-    console.error('drill failed', err);
-    if(ld){ ld.style.display='flex'; ld.style.color='#fca5a5'; ld.textContent='Não foi possível carregar os municípios: '+(err.message||err); }
-    mapLevel='br';
-  }
-}
-
-function refreshMunData(){
-  if(!mapReady || !map || !map.getSource('muns')) return;
-  const nameByCode = munNamesCache[curUFcode]||{};
-  const counts={};
-  for(const s of filtered){ const k=normalize(s.municipio); counts[k]=(counts[k]||0)+1; }
-  for(const code in nameByCode){
-    const k=normalize(nameByCode[code]);
-    map.setFeatureState({source:'muns', id:parseInt(code,10)}, { count: counts[k]||0 });
-  }
-  const sub=document.getElementById('mapSubtitle');
-  if(sub){
-    const nMun = selectedMuns ? selectedMuns.length : 0;
-    sub.textContent = nMun
-      ? `${fmt(filtered.length)} escolas em ${nMun} município${nMun>1?'s':''} de ${curUFsigla} • clique para remover`
-      : `${fmt(filtered.length)} escolas sem água em ${curUFsigla} • clique num município para filtrar`;
-  }
-}
-
 function backToBR(){
   if(!mapReady || !map) return;
-  mapLevel='br'; curUFsigla=null; curUFcode=null;
-  ['mun-fill','mun-line','mun-hover'].forEach(l=>{ if(map.getLayer(l)) map.setLayoutProperty(l,'visibility','none'); });
-  ['uf-fill','uf-line','uf-hover','uf-selected'].forEach(l=>{ if(map.getLayer(l)) map.setLayoutProperty(l,'visibility','visible'); });
-  map.flyTo({center:[-54,-14], zoom:3.3, duration:800});
-  document.getElementById('mapTitle').textContent='Distribuição Geográfica por Estado';
-  document.getElementById('mapBack').style.display='none';
   selectedUFs=[]; selectedMuns=[];
   if(typeof renderUFOptionsList==='function') renderUFOptionsList();
   renderUFDisplay(); buildMunOptions(); renderMunDisplay();
-  applyFilters();
+  applyFilters(); // -> refreshMapData -> showNationalMode (fly de volta ao Brasil)
 }
 
 function updateMapa(){
