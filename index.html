@@ -207,7 +207,7 @@ tr:hover td{background:rgba(56,189,248,.04)}
 .map-loading::before{content:'';width:16px;height:16px;border:2px solid var(--border2);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 .map-legend{display:flex;align-items:center;gap:.65rem;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius2);padding:.55rem .9rem;font-size:.75rem;color:var(--text2)}
-.map-legend-scale{height:10px;width:180px;border-radius:3px;background:linear-gradient(to right,#1e293b 0%,#7f1d1d 18%,#b91c1c 40%,#ef4444 65%,#f97316 85%,#fbbf24 100%)}
+.map-legend-scale{height:10px;width:180px;border-radius:3px;background:linear-gradient(to right,#fde047 0%,#fbbf24 22%,#f97316 48%,#ef4444 72%,#dc2626 88%,#991b1b 100%)}
 .maplibregl-popup-content{background:var(--bg3)!important;color:var(--text)!important;border:1px solid var(--border2);border-radius:var(--radius2);font-family:'Bricolage Grotesque',sans-serif;padding:.6rem .8rem!important;font-size:.8rem;line-height:1.45}
 .maplibregl-popup-tip{border-top-color:var(--bg3)!important;border-bottom-color:var(--bg3)!important;border-left-color:var(--bg3)!important;border-right-color:var(--bg3)!important}
 .maplibregl-ctrl-group{background:var(--bg2)!important;border:1px solid var(--border)!important}
@@ -1126,7 +1126,7 @@ async function initMap(){
       paint:{
         'fill-color':['interpolate',['linear'],
           ['coalesce',['feature-state','count'],0],
-          0,'#1e293b', 1,'#5b1616', 100,'#7f1d1d', 400,'#b91c1c', 1200,'#ef4444', 2800,'#f97316', 5500,'#fbbf24'
+          0,'#1e293b', 1,'#fde047', 100,'#fbbf24', 400,'#f97316', 1200,'#ef4444', 2800,'#dc2626', 5500,'#991b1b'
         ],
         'fill-opacity':0.78
       }
@@ -1292,7 +1292,7 @@ function buildMunLayers(geo){
     id:'mun-fill', type:'fill', source:'muns',
     paint:{
       'fill-color':['interpolate',['linear'],['coalesce',['feature-state','count'],0],
-        0,'#1e293b', 1,'#5b1616', 5,'#7f1d1d', 15,'#b91c1c', 40,'#ef4444', 90,'#f97316', 160,'#fbbf24'],
+        0,'#1e293b', 1,'#fde047', 5,'#fbbf24', 15,'#f97316', 40,'#ef4444', 90,'#dc2626', 160,'#991b1b'],
       'fill-opacity':0.82
     }
   });
