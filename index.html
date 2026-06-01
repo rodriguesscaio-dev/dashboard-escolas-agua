@@ -199,7 +199,8 @@ tr:hover td{background:rgba(56,189,248,.04)}
 .map-controls{display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;flex-wrap:wrap;gap:1rem}
 .map-info h3{font-family:'Playfair Display',serif;font-weight:700;font-size:1.15rem;margin-bottom:.25rem}
 .map-info p{color:var(--text2);font-size:.85rem}
-.map-container{position:relative;width:100%;height:calc(100vh - 260px);min-height:520px;border-radius:var(--radius);border:1px solid var(--border);overflow:hidden;background:var(--bg2)}
+.map-section{margin-bottom:1.5rem}
+.map-container{position:relative;width:100%;height:clamp(440px,52vh,600px);border-radius:var(--radius);border:1px solid var(--border);overflow:hidden;background:var(--bg2)}
 .map-loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(10,14,23,.92);z-index:2;color:var(--text2);font-size:.88rem;gap:.6rem}
 .map-loading::before{content:'';width:16px;height:16px;border:2px solid var(--border2);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
@@ -251,6 +252,25 @@ tr:hover td{background:rgba(56,189,248,.04)}
 
   <!-- Alerts -->
   <div class="alert-grid" id="alerts"></div>
+
+  <!-- Mapa (sempre visivel) -->
+  <div class="map-section fade-in">
+    <div class="map-controls">
+      <div class="map-info">
+        <h3>Distribuição Geográfica por Estado</h3>
+        <p id="mapSubtitle">Carregando dados…</p>
+      </div>
+      <div class="map-legend" title="Escolas sem água potável por estado (de acordo com os filtros)">
+        <span>Menos</span>
+        <div class="map-legend-scale"></div>
+        <span>Mais</span>
+      </div>
+    </div>
+    <div class="map-container">
+      <div id="mapEl" style="width:100%;height:100%"></div>
+      <div class="map-loading" id="mapLoading">Carregando mapa…</div>
+    </div>
+  </div>
 
   <!-- Filters -->
   <div class="filters fade-in">
@@ -330,7 +350,6 @@ tr:hover td{background:rgba(56,189,248,.04)}
     <button class="tab" data-tab="perfil">Perfil das Escolas</button>
     <button class="tab" data-tab="demografico">Demográfico</button>
     <button class="tab" data-tab="tabela">Tabela de Dados</button>
-    <button class="tab" data-tab="mapa">Mapa</button>
   </div>
 
   <!-- TAB: Overview -->
@@ -424,25 +443,6 @@ tr:hover td{background:rgba(56,189,248,.04)}
         </table>
       </div>
       <div class="pagination" id="pagination"></div>
-    </div>
-  </div>
-
-  <!-- TAB: Mapa -->
-  <div id="tab-mapa" class="tab-content" style="display:none">
-    <div class="map-controls fade-in">
-      <div class="map-info">
-        <h3>Distribuição Geográfica por Estado</h3>
-        <p id="mapSubtitle">Carregando dados…</p>
-      </div>
-      <div class="map-legend" title="Escolas sem água potável por estado (de acordo com os filtros)">
-        <span>Menos</span>
-        <div class="map-legend-scale"></div>
-        <span>Mais</span>
-      </div>
-    </div>
-    <div class="map-container fade-in">
-      <div id="mapEl" style="width:100%;height:100%"></div>
-      <div class="map-loading" id="mapLoading">Carregando mapa…</div>
     </div>
   </div>
 </div>
@@ -1044,7 +1044,8 @@ function updateAll(){
   else if(activeTab==='perfil') updatePerfil();
   else if(activeTab==='demografico') updateDemografico();
   else if(activeTab==='tabela') updateTable();
-  else if(activeTab==='mapa') updateMapa();
+
+  refreshMapData(); // mapa fica sempre visivel, atualiza junto com os filtros
 }
 
 // === MAP ===
@@ -1661,6 +1662,7 @@ populateFilters();
 buildUFOptions();
 buildMunOptions();
 updateAll();
+initMap(); // mapa sempre visivel, carrega no load da pagina
 </script>
 
 <!-- CONTACT WIDGET -->
