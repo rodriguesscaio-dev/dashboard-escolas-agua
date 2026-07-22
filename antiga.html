@@ -258,9 +258,9 @@ a.ver-btn:not(.active):hover{color:var(--text)}
   <div class="top-controls">
     <div style="display:flex;gap:.7rem;flex-wrap:wrap;align-items:center">
       <div class="ver-switch seg">
-        <span class="seg-label">Versão</span>
-        <a class="seg-btn ver-btn" href="index.html">Nova</a>
-        <span class="seg-btn ver-btn active">Antiga</span>
+        <span class="seg-label" data-i18n="verLabel">Versão</span>
+        <a class="seg-btn ver-btn" href="index.html" data-i18n="verNova">Nova</a>
+        <span class="seg-btn ver-btn active" data-i18n="verAntiga">Antiga</span>
       </div>
       <div class="year-switch seg">
         <span class="seg-label" data-i18n="yearLabel">Censo</span>
@@ -508,7 +508,7 @@ try { const qp = new URLSearchParams(location.search).get('lang'); if(qp==='en'|
 const T = {
  pt:{
   title:'Escolas sem Água Potável no Brasil',
-  subtitle:p=>`Microdados do Censo Escolar ${p.year} · INEP`, yearLabel:'Censo',
+  subtitle:p=>`Microdados do Censo Escolar ${p.year} · INEP`, yearLabel:'Censo', verLabel:'Versão', verNova:'Nova', verAntiga:'Antiga',
   badge:'⚠ Nenhuma escola possui água potável',
   mapTitleState:'Distribuição Geográfica por Estado',
   mapBack:'◀ Voltar ao Brasil',
@@ -582,7 +582,7 @@ const T = {
  },
  en:{
   title:'Schools Without Potable Water in Brazil',
-  subtitle:p=>`School Census ${p.year} Microdata · INEP`, yearLabel:'Census',
+  subtitle:p=>`School Census ${p.year} Microdata · INEP`, yearLabel:'Census', verLabel:'Version', verNova:'New', verAntiga:'Old',
   badge:'⚠ None of these schools have potable water',
   mapTitleState:'Geographic Distribution by State',
   mapBack:'◀ Back to Brazil',
